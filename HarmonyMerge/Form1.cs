@@ -251,6 +251,10 @@ namespace HarmonyMerge
             
             string rootPath = di.Parent?.Parent?.FullName;
 
+            KillHarmony();
+
+            //RepairFolderPermissions(mainScene);
+
             Console.WriteLine("MY LIBRARY: " + libPath);
 
             var envLibVars = new System.Collections.Generic.Dictionary<string, string>
@@ -268,7 +272,7 @@ namespace HarmonyMerge
                 currentCount++;
                 progress.Report(currentCount);
 
-                System.Threading.Thread.Sleep(1000);
+                System.Threading.Thread.Sleep(3000);
             }
 
             var importSc = rootPath + "\\RC_ImportTPL.js";
@@ -279,28 +283,26 @@ namespace HarmonyMerge
 
             RunHarmonyBatch(harmonyPath, mainScene, importSc, envLibVars, rowIndex, false);
 
-            System.Threading.Thread.Sleep(10000);
+            //System.Threading.Thread.Sleep(10000);
 
-            //RepairFolderPermissions(mainScene);
+            //var psdSc = rootPath + "\\RC_ImportPSD.js";
+            //var envPsdVars = new System.Collections.Generic.Dictionary<string, string>
+            //{
+            //    { "TARGET_PSD", psdPath },
+            //};
 
-            var psdSc = rootPath + "\\RC_ImportPSD.js";
-            var envPsdVars = new System.Collections.Generic.Dictionary<string, string>
-            {
-                { "TARGET_PSD", psdPath },
-            };
-
-            RunHarmonyBatch(harmonyPath, mainScene, psdSc, envPsdVars, rowIndex, false);
+            //RunHarmonyBatch(harmonyPath, mainScene, psdSc, envPsdVars, rowIndex, false);
         }
 
         private void RunHarmonyBatch(string appPath, string sceneFile, string scriptFile, Dictionary<string, string> env, int rowIndex, bool isReadOnly)
         {
-            // Arguments = $"\"{sceneFile}\" -user usabatch -batch -compile \"{scriptFile}\" {(isReadOnly ? "-readonly " : "")}",
+            // Arguments = $" -user usabatch \"{sceneFile}\" -compile \"{scriptFile}\" {(isReadOnly ? "-readonly " : "")}",
             // Arguments = $" -batch -compile \"{scriptFile}\" \"{sceneFile}\" {(isReadOnly ? "-readonly " : "")}",
 
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = appPath,
-                Arguments = $" -batch -compile \"{scriptFile}\" \"{sceneFile}\" {(isReadOnly ? "-readonly " : "")}",
+                Arguments = $" -user usabatch \"{sceneFile}\" -compile \"{scriptFile}\" {(isReadOnly ? "-readonly " : "")}",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -524,6 +526,35 @@ namespace HarmonyMerge
             dSecurity.AddAccessRule(fullControlRule);
 
             dInfo.SetAccessControl(dSecurity);
+        }
+
+        public static void KillHarmony()
+        {
+            string[] harmonyProcesses = { "HarmonyPremium", "HarmonyAdvanced", "HarmonyEssentials" };
+
+            foreach (var name in harmonyProcesses)
+            {
+                var processes = Process.GetProcessesByName(name);
+
+                foreach (var process in processes)
+                {
+                    try
+                    {
+                        Console.WriteLine($"Found {name} (PID: {process.Id}). Ending process...");
+
+                        process.Kill();
+
+                        // Optional: Wait for the process to fully exit
+                        //process.WaitForExit(5000);
+
+                        Console.WriteLine("Process ended successfully.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Could not end process: {ex.Message}");
+                    }
+                }
+            }
         }
     }
 }

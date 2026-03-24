@@ -64,27 +64,68 @@ function exportSelectionAsTemplate() {
 
     // --- BLOCK 3: FOLDER PREP & SAVE ---
     try {
-        var dir = new Dir(config.targetPath);
-        if (!dir.exists) {
-            if (!dir.mkdirs()) throw new Error("OS denied folder creation at " + config.targetPath);
+        //var dir = new Dir(config.targetPath);
+        //if (!dir.exists) {
+        //    if (!dir.mkdirs()) throw new Error("OS denied folder creation at " + config.targetPath);
+        //}
+
+        var savedSelectionArray = [];
+        var numSelected = selection.numberOfNodesSelected();
+
+        for (var j = 0; j < numSelected; j++) {
+            savedSelectionArray.push(selection.selectedNode(j));
         }
 
-        var maxRetries = 3;
+        //// --- GRAB DRWING SUBS ---
+        //var currentSceneLength = frame.numberOf();
+        //var writeHead = currentSceneLength + 10;
+        //var maxExposedFrame = writeHead;
+
+        //for (var i = 0; i < savedSelectionArray.length; i++) {
+        //    var curr = savedSelectionArray[i];
+        //    if (node.type(curr) === "READ") {
+        //        var colName = node.linkedColumn(curr, "DRAWING.ELEMENT");
+        //        if (colName) {
+        //            var drawingNames = column.getDrawingTimings(colName);
+
+        //            for (var d = 0; d < drawingNames.length; d++) {
+        //                var targetFrame = writeHead + d;
+        //                column.setEntry(colName, 1, targetFrame, drawingNames[d]);
+        //                if (targetFrame > maxExposedFrame) maxExposedFrame = targetFrame;
+        //            }
+        //        }
+        //    }
+        //}
+
+        //var targetTotalFrames = maxExposedFrame + 5;
+        //if (targetTotalFrames > currentSceneLength) {
+        //    var framesToAdd = targetTotalFrames - currentSceneLength;
+        //    frame.insert(currentSceneLength, framesToAdd);
+        //    MessageLog.trace("Scene extended by " + framesToAdd + " frames.");
+        //}
+
+        // --- REPOPULATE SELECTION
+        selection.clearSelection(); //
+        selection.addNodesToSelection(savedSelectionArray);
+
+        // --- 3 Second Delay ---
+        MessageLog.trace("Starting 3s delay before template creation...");
+        var delayMs = 3000; // 3 seconds
+        var endTime = new Date().getTime() + delayMs;
+        while (new Date().getTime() < endTime) {
+            // This loop runs until 3 seconds have passed
+        }
+
         var resultPath = "";
 
-        for (var r = 0; r < maxRetries; r++) {
-            resultPath = copyPaste.createTemplateFromSelection(config.tplName, config.targetPath);
-            if (resultPath !== "") break; // Success!
-
-            MessageLog.trace("Retry " + (r + 1) + ": Folder busy, waiting...");
-            // There is no Sleep in Harmony JS, so we just log and try again
-        }
+        resultPath = copyPaste.createTemplateFromSelection(config.tplName, config.targetPath);
 
         if (!resultPath || resultPath === "") {
             throw new Error("Template creation failed. Folder may be 'In Use' or Read-Only.");
         }
 
         MessageLog.trace("Step 3 Success: Template exported to " + resultPath);
+
     } catch (e) {
         MessageLog.trace("Step 3 Failure (Save): " + e.message);
     }
