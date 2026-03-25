@@ -22,6 +22,10 @@ namespace HarmonyMerge
         private string episodePath;
         private LogWindow _logWindow = new LogWindow();
 
+        private static string AppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        private static string TargetDir = Path.Combine(AppData, @"Toon Boom Animation\Toon Boom Harmony Premium\2400-scripts");
+        private static string StartupScriptPath = Path.Combine(TargetDir, "TB_sceneOpened.js");
+
         public Form1()
         {
             InitializeComponent();
@@ -253,12 +257,16 @@ namespace HarmonyMerge
 
             KillHarmony();
 
+            //CopyScriptToHarmonyAppData(rootPath);
             //RepairFolderPermissions(mainScene);
+
+            System.Threading.Thread.Sleep(1000);
 
             Console.WriteLine("MY LIBRARY: " + libPath);
 
             var envLibVars = new System.Collections.Generic.Dictionary<string, string>
             {
+                { "HARMONY_TASK", "EXPORT" },
                 { "MY_LIB_PATH", libPath }
             };
 
@@ -271,33 +279,35 @@ namespace HarmonyMerge
 
                 currentCount++;
                 progress.Report(currentCount);
-
-                System.Threading.Thread.Sleep(3000);
             }
 
             var importSc = rootPath + "\\RC_ImportTPL.js";
             var envTplVars = new System.Collections.Generic.Dictionary<string, string>
             {
+                { "HARMONY_TASK", "IMPORT" },
+                { "MY_LIB_PATH", libPath },
                 { "TPL_COUNT", convertToTpl.Count.ToString() }
             };
 
             RunHarmonyBatch(harmonyPath, mainScene, importSc, envLibVars, rowIndex, false);
 
-            //System.Threading.Thread.Sleep(10000);
+            System.Threading.Thread.Sleep(1000);
 
-            //var psdSc = rootPath + "\\RC_ImportPSD.js";
-            //var envPsdVars = new System.Collections.Generic.Dictionary<string, string>
-            //{
-            //    { "TARGET_PSD", psdPath },
-            //};
+            var psdSc = rootPath + "\\RC_ImportPSD.js";
+            var envPsdVars = new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "TARGET_PSD", psdPath },
+            };
 
-            //RunHarmonyBatch(harmonyPath, mainScene, psdSc, envPsdVars, rowIndex, false);
+            RunHarmonyBatch(harmonyPath, mainScene, psdSc, envPsdVars, rowIndex, false);
         }
 
         private void RunHarmonyBatch(string appPath, string sceneFile, string scriptFile, Dictionary<string, string> env, int rowIndex, bool isReadOnly)
         {
             // Arguments = $" -user usabatch \"{sceneFile}\" -compile \"{scriptFile}\" {(isReadOnly ? "-readonly " : "")}",
             // Arguments = $" -batch -compile \"{scriptFile}\" \"{sceneFile}\" {(isReadOnly ? "-readonly " : "")}",
+            // Arguments = $" \"{sceneFile}\" -compile \"{scriptFile}\" {(isReadOnly ? "-readonly " : "")}",
+            // Arguments = $" \"{sceneFile}\" {(isPsd ? "-compile \"{scriptFile}\" " : "")} {(isReadOnly ? "-readonly " : "")}",
 
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
@@ -314,7 +324,6 @@ namespace HarmonyMerge
                 foreach (var v in env)
                 {
                     //Environment.SetEnvironmentVariable(v.Key, v.Value, EnvironmentVariableTarget.User);
-                    startInfo.UseShellExecute = false;
                     startInfo.EnvironmentVariables[v.Key] = v.Value;
 
                     Console.WriteLine($"[ENV] send variable: {startInfo.EnvironmentVariables[v.Key] = v.Value} ");
@@ -323,23 +332,29 @@ namespace HarmonyMerge
 
             Console.WriteLine($"[LOG] Processing: {Path.GetFileName(sceneFile)}...");
 
-            using (Process p = Process.Start(startInfo))
+            using (Process p = new Process())
             {
-                // Real-time log capture
+                p.StartInfo = startInfo;
+                p.StartInfo.RedirectStandardOutput = true;
+                p.StartInfo.RedirectStandardError = true;
+                p.StartInfo.UseShellExecute = false;
+                p.StartInfo.CreateNoWindow = true;
+
+                // Set up real-time log capture BEFORE starting
                 p.OutputDataReceived += (s, e) => { if (e.Data != null) _logWindow.AppendLog(e.Data); };
                 p.ErrorDataReceived += (s, e) => { if (e.Data != null) _logWindow.AppendLog("ERROR: " + e.Data); };
 
+                _logWindow.AppendLog($"STARTING: {Path.GetFileName(sceneFile)}");
+
+                // START ONLY ONCE
                 p.Start();
+
                 p.BeginOutputReadLine();
                 p.BeginErrorReadLine();
 
-                _logWindow.AppendLog($"STARTING: {Path.GetFileName(sceneFile)}");
-
                 p.WaitForExit();
 
-                //string output = p.StandardOutput.ReadToEnd();
-                //Console.WriteLine(output); // This shows you Harmony's internal logs/errors
-
+                // UI Updates
                 this.Invoke(new Action(() => {
                     dataGridView.Rows[rowIndex].Cells["Status"].Value =
                         (p.ExitCode == 0) ? Properties.Resources.STATUS_DONE : Properties.Resources.STATUS_ERROR;
@@ -353,6 +368,13 @@ namespace HarmonyMerge
                 {
                     Console.WriteLine($"[ERROR] Harmony exited with code {p.ExitCode}");
                 }
+
+                // Cleanup script
+                //if (File.Exists(StartupScriptPath))
+                //{
+                //    File.Delete(StartupScriptPath);
+                //    Console.WriteLine("Cleanup: TB_sceneOpened.js removed.");
+                //}
             }
         }
 
@@ -445,18 +467,18 @@ namespace HarmonyMerge
 
         private async void buttRenderAll_Click(object sender, EventArgs e)
         {
+            var result = MessageBox.Show(
+                "Are you sure you want to process all files in the list?",
+                "Confirm Batch Processing",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (result != DialogResult.Yes) return;
+
             buttRenderAll.Enabled = false;
 
             foreach (DataGridViewRow row in dataGridView.Rows)
             {
-                var result = MessageBox.Show(
-                    "Are you sure you want to process files?",
-                    "Confirm Batch Merge",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question);
-
-                if (result != DialogResult.Yes) return;
-
                 if (row.IsNewRow || row.Tag == null) continue;
 
                 dataGridView.ClearSelection();
@@ -555,6 +577,25 @@ namespace HarmonyMerge
                     }
                 }
             }
+        }
+
+        public static void CopyScriptToHarmonyAppData(string sourceDir)
+        {
+            string[] scriptFiles = { "TB_sceneOpened.js", "RC_ImportTPL.js", "RC_ExportTPL.js" };
+
+            if (!Directory.Exists(TargetDir)) Directory.CreateDirectory(TargetDir);
+
+            foreach (string fileName in scriptFiles)
+            {
+                string sourceFile = Path.Combine(sourceDir, fileName);
+                string destFile = Path.Combine(TargetDir, fileName);
+
+                if (File.Exists(sourceFile))
+                {
+                    File.Copy(sourceFile, destFile, true);
+                }
+            }
+            Console.WriteLine("Scripts copied and overwritten in Harmony folder.");
         }
     }
 }

@@ -2,9 +2,9 @@
 import .tpl in a harmony scene
 */
 
-
 function importTemplatesToGroups() {
     var libPath = System.getenv("MY_LIB_PATH");
+    //var libPath = targetFolder;
     //var libPath = "D:/MERGE_TEST/IMPORT_LIBRARY/EP01";
 
     var sceneFileName = scene.currentScene();
@@ -61,67 +61,56 @@ function importTemplatesToGroups() {
             MessageLog.trace("Step 2 Success: Created container " + groupName);
         } catch (e) {
             MessageLog.trace("Step 2 Failure (Group Setup): " + e.message);
-            continue; 
+            continue; // Skip to next template
         }
 
         // --- BLOCK 3: ADD TO SCENE (Pasting & Linking) ---
         try {
             var pOptions = copyPaste.getCurrentPasteOptions();
-            pOptions.createNewColumn = true;
-            pOptions.drawingSubstitution = true;
+            pOptions.lockAggregation = false;
+            pOptions.allFromColumn = false; // Force unique drawings
 
-            var maxRetries = 30;
-            var waitTimeMs = 100; // Time to wait between retries
-            var dragObj = null;
+            var success = copyPaste.pasteTemplateIntoGroup(currentTpl.path, newGroupPath, 1, pOptions);
+            if (!success) throw new Error("Paste failed. .tpl might be corrupt or in-use.");
 
-            for (var r = 0; r < maxRetries; r++) {
-                dragObj = copyPaste.copyFromTemplate(currentTpl.path, 0, 0, null);
+            // Internal Linking (Composite to Multi-Port Out)
+            var subNodes = node.subNodes(newGroupPath);
+            var mIn = newGroupPath + "/Multi-Port_In";
+            var mOut = newGroupPath + "/Multi-Port_Out";
 
-                // If dragObj is successfully created, exit the loop
-                if (dragObj) {
-                    MessageLog.trace("Template copied successfully on attempt " + (r + 1));
+            for (var n = 0; n < subNodes.length; n++) {
+                var currentNode = subNodes[n];
+                var nodeName = node.getName(currentNode);
+                if (nodeName === "Composite") {
+                    node.link(currentNode, 0, mOut, 0);
                     break;
                 }
-
-                MessageLog.trace("Retry " + (r + 1) + ": Folder busy, waiting...");
-
-                // Custom Sleep: Wait for waitTimeMs before next iteration
-                var startTime = new Date().getTime();
-                while (new Date().getTime() < startTime + waitTimeMs) {
-                    // Busy-waiting to pause the script
-                }
             }
 
-            if (!dragObj) {
-                MessageLog.trace("Error: Failed to copy template after " + maxRetries + " attempts.");
-            } else {
+            //for (var n = 0; n < subNodes.length; n++) {
+            //    var currentNode = subNodes[n];
+            //    if (node.type(subNodes[n]) === "PEG") {
+            //        var numInputs = node.numberOfInputPorts(currentNode);
+            //        var isConnected = false;
 
-                var success = copyPaste.pasteNewNodes(dragObj, newGroupPath, pOptions);
+            //        for (var p = 0; p < numInputs; p++) {
+            //            if (node.isLinked(currentNode, p)) {
+            //                isConnected = true;
+            //                break;
+            //            }
+            //        }
 
-                if (!success) {
-                    throw new Error("Paste failed. Internal IDs may be corrupted in the .tpl.");
-                }
+            //        if (!isConnected) {
+            //            node.link(subNodes[n], 0, mIn, 0, false, false);
+            //            portIndex++; // Increment to create a new port on Multi-Port In
+            //        }
+            //    }
+            //}
 
-                var subNodes = node.subNodes(newGroupPath);
-                var mIn = newGroupPath + "/Multi-Port_In";
-                var mOut = newGroupPath + "/Multi-Port_Out";
+            node.link(newGroupPath, 0, mainComposite, 0);
+            node.setCoord(newGroupPath, j * 250, -200);
 
-                for (var n = 0; n < subNodes.length; n++) {
-                    var currentNode = subNodes[n];
-                    var nodeName = node.getName(currentNode);
-                    if (nodeName === "Composite") {
-                        node.link(currentNode, 0, mOut, 0);
-                        break;
-                    }
-                }
-
-                node.link(newGroupPath, 0, mainComposite, 0);
-                node.setCoord(newGroupPath, j * 250, -200);
-
-                MessageLog.trace("Step 3 Success: Template " + currentTpl.name + " integrated.");
-            }
-
-            
+            MessageLog.trace("Step 3 Success: Template " + currentTpl.name + " integrated.");
         } catch (e) {
             MessageLog.trace("Step 3 Failure (Injection): " + e.message);
         }

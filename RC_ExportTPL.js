@@ -22,11 +22,11 @@ function exportSelectionAsTemplate() {
         }
 
         var sceneFileName = scene.currentScene();
-        // Sanitize name: remove spaces/special chars that cause permission errors
         config.tplName = (parentDir + "_" + sceneFileName).replace(/[^a-z0-9._-]/gi, '_') + ".tpl";
 
-        //var libPath = "D:/MERGE_TEST/IMPORT_LIBRARY/EP01";
         var libPath = System.getenv("MY_LIB_PATH");
+        //var libPath = targetFolder;
+        //var libPath = "D:/MERGE_TEST/IMPORT_LIBRARY/EP01";
         if (!libPath) throw new Error("Environment Variable 'MY_LIB_PATH' is missing.");
 
         config.targetPath = libPath.replace(/\\/g, "/");
@@ -64,60 +64,15 @@ function exportSelectionAsTemplate() {
 
     // --- BLOCK 3: FOLDER PREP & SAVE ---
     try {
-        //var dir = new Dir(config.targetPath);
-        //if (!dir.exists) {
-        //    if (!dir.mkdirs()) throw new Error("OS denied folder creation at " + config.targetPath);
+         // --- 3 Second Delay ---
+        //MessageLog.trace("Starting 3s delay before template creation...");
+        //var delayMs = 3000; // 3 seconds
+        //var endTime = new Date().getTime() + delayMs;
+        //while (new Date().getTime() < endTime) {
+        //    // This loop runs until 3 seconds have passed
         //}
-
-        var savedSelectionArray = [];
-        var numSelected = selection.numberOfNodesSelected();
-
-        for (var j = 0; j < numSelected; j++) {
-            savedSelectionArray.push(selection.selectedNode(j));
-        }
-
-        //// --- GRAB DRWING SUBS ---
-        //var currentSceneLength = frame.numberOf();
-        //var writeHead = currentSceneLength + 10;
-        //var maxExposedFrame = writeHead;
-
-        //for (var i = 0; i < savedSelectionArray.length; i++) {
-        //    var curr = savedSelectionArray[i];
-        //    if (node.type(curr) === "READ") {
-        //        var colName = node.linkedColumn(curr, "DRAWING.ELEMENT");
-        //        if (colName) {
-        //            var drawingNames = column.getDrawingTimings(colName);
-
-        //            for (var d = 0; d < drawingNames.length; d++) {
-        //                var targetFrame = writeHead + d;
-        //                column.setEntry(colName, 1, targetFrame, drawingNames[d]);
-        //                if (targetFrame > maxExposedFrame) maxExposedFrame = targetFrame;
-        //            }
-        //        }
-        //    }
-        //}
-
-        //var targetTotalFrames = maxExposedFrame + 5;
-        //if (targetTotalFrames > currentSceneLength) {
-        //    var framesToAdd = targetTotalFrames - currentSceneLength;
-        //    frame.insert(currentSceneLength, framesToAdd);
-        //    MessageLog.trace("Scene extended by " + framesToAdd + " frames.");
-        //}
-
-        // --- REPOPULATE SELECTION
-        selection.clearSelection(); //
-        selection.addNodesToSelection(savedSelectionArray);
-
-        // --- 3 Second Delay ---
-        MessageLog.trace("Starting 3s delay before template creation...");
-        var delayMs = 3000; // 3 seconds
-        var endTime = new Date().getTime() + delayMs;
-        while (new Date().getTime() < endTime) {
-            // This loop runs until 3 seconds have passed
-        }
 
         var resultPath = "";
-
         resultPath = copyPaste.createTemplateFromSelection(config.tplName, config.targetPath);
 
         if (!resultPath || resultPath === "") {
