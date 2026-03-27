@@ -12,6 +12,7 @@ The setup also uses 3 scripts located in the root of the project.
 RC_ImportTPL.js<br />
 RC_ExportTPL.js<br />
 RC_ImportPSD.js<br />
+<br />
 BACKGROUNDS<br />
 —EPISODE01<br />
 ——PSD_01<br />
