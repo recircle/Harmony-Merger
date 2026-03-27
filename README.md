@@ -39,7 +39,7 @@ ANIMATION<br />
 ——SHOT01<br />
 ——SHOT02<br />
 ——SHOT03<br />
-
+<br />
 All shots collected from EPISODE01 will be matched with all shots found in the ANIMATORS directory within EPISODE01. The program will then look into the parent BACKGROUNDS directory and match all `.psd` documents to the corresponding shots.
 
 
