@@ -8,6 +8,7 @@ The idea is to automate the merging of multiple `.xstage` scenes into one: <br /
 <br />
 The current setup assumes a specific directory structure, but this can easily be customized by modifying the conditions in the `ProcessDirectories(string rootPath)` functions. The setup also uses 3 scripts located in the root of the project. RC_ImportTPL.js RC_ExportTPL.js RC_ImportPSD.js
 <br />
+<br />
 BACKGROUNDS<br />
 —EPISODE01<br />
 ——PSD_01<br />
