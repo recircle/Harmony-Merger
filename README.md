@@ -6,9 +6,7 @@ The idea is to automate the merging of multiple `.xstage` scenes into one: <br /
 - import all tpl files into target .xstage<br />
 - import psd<br />
 <br />
-The current setup assumes a specific directory structure, but this can easily be customized by modifying the conditions in the `ProcessDirectories(string rootPath)` functions.  
-<br />
-The setup also uses 3 scripts located in the root of the project.
+The current setup assumes a specific directory structure, but this can easily be customized by modifying the conditions in the `ProcessDirectories(string rootPath)` functions. The setup also uses 3 scripts located in the root of the project.
 <br />
 RC_ImportTPL.js<br />
 RC_ExportTPL.js<br />
