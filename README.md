@@ -5,9 +5,13 @@ GUI for ToonBoom Harmony .xscene merger.
 
 The idea is to automate the merging of multiple `.xstage` scenes into one, and finally add a background.
 <br />
-The current setup assumes a specific directory structure, but it can easily be customized by modifying the conditions in the `ProcessDirectories(string rootPath)` function. 
+The current setup assumes a specific directory structure, but this can easily be customized by modifying the conditions in the `ProcessDirectories(string rootPath)` functions.  
 <br />
+The setup also uses 3 scripts located in the root of the project.
 
+RC_ImportTPL.js
+RC_ExportTPL.js
+RC_ImportPSD.js
 BACKGROUNDS<br />
 —EPISODE01<br />
 —EPISODE02<br />
