@@ -1,14 +1,16 @@
-GUI for ToonBoom Harmony .xscene and .psd files merger. 
-<br />
+# GUI for ToonBoom Harmony .xscene and .psd files merger. 
+
 The idea is to automate the merging of multiple `.xstage` scenes into one: <br />
 - scan directories for file collection<br />
 - export artists files to tpl folder<br />
 - import all tpl files into target .xstage<br />
 - import psd<br />
-<br />
+
+## Overview
+
 The current setup assumes a specific directory structure, but this can easily be customized by modifying the conditions in the `ProcessDirectories(string rootPath)` functions. The setup also uses 3 scripts located in the root of the project. RC_ImportTPL.js RC_ExportTPL.js RC_ImportPSD.js
-<br />
-<br />
+
+* *Current scheme*:
 ```shell
 ──BACKGROUNDS
     └───EPISODE01
