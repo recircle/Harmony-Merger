@@ -2,17 +2,12 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Security.AccessControl;
-using System.Security.Cryptography;
-using System.Security.Policy;
 using System.Security.Principal;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace HarmonyMerge
 {
@@ -80,127 +75,141 @@ namespace HarmonyMerge
             using (var fbd = new FolderBrowserDialog())
             {
                 string savedPath = Properties.Settings.Default.LastPath;
-
                 if (!string.IsNullOrEmpty(savedPath) && Directory.Exists(savedPath))
-                {
                     fbd.SelectedPath = savedPath;
-                }
 
                 if (fbd.ShowDialog() == DialogResult.OK)
                 {
-                    Properties.Settings.Default.LastPath = fbd.SelectedPath;
-                    Properties.Settings.Default.Save();
-
                     episodePath = fbd.SelectedPath;
+                    SaveLastPath(episodePath);
+
+                    progressBar.Value = 0;
+                    mergingTextOutput.Text = "START PROCESSING";
+
                     await Task.Run(() => ProcessDirectories(episodePath));
+
+                    mergingTextOutput.Text = "PROCESSING COMPLETE";
                 }
             }
         }
 
         private void ProcessDirectories(string rootPath)
         {
-            // 1. Get Primary Index 
-            var primaryFiles = Directory.GetDirectories(rootPath)
+            var primaryFiles = ScanPrimaryFiles(rootPath);
+            var animatorMap = ScanAnimators(rootPath);
+            var psdFiles = ScanPsdFiles(rootPath);
+            var folderColumns = animatorMap.Keys.ToList();
+
+            this.Invoke(new Action(() => InitializeGridColumns(primaryFiles.Count, folderColumns)));
+
+            for (int i = 0; i < primaryFiles.Count; i++)
+            {
+                var primary = primaryFiles[i];
+                int step = i + 1;
+
+                this.Invoke(new Action(() =>
+                {
+                    mergingTextOutput.Text = $"PROCESSING: {primary.Name}";
+                    progressBar.Value = step;
+                    mergingTextOutput.Refresh();
+                    progressBar.Refresh();
+
+                    AddFileRow(primary, folderColumns, animatorMap, psdFiles);
+                }));
+            }
+            this.Invoke(new Action(() => mergingTextOutput.Text = "FINISHED LOADING."));
+        }
+
+        private void SaveLastPath(string path)
+        {
+            Properties.Settings.Default.LastPath = path;
+            Properties.Settings.Default.Save();
+        }
+
+        private List<dynamic> ScanPrimaryFiles(string rootPath)
+        {
+            return Directory.GetDirectories(rootPath)
                 .SelectMany(d => Directory.GetFiles(d, "*.xstage", SearchOption.TopDirectoryOnly))
                 .Where(f => !Path.GetFileName(f).Contains("_render"))
-                .Select(f => new { Name = Path.GetFileNameWithoutExtension(f), FullPath = f })
+                .Select(f => (dynamic)new { Name = Path.GetFileNameWithoutExtension(f), FullPath = f })
                 .ToList();
+        }
 
-            // 2. ANIMATORS 
+        private Dictionary<string, List<string>> ScanAnimators(string rootPath)
+        {
+            var map = new Dictionary<string, List<string>>();
             string animPath = Path.Combine(rootPath, "ANIMATORS");
-            var animatorMap = new Dictionary<string, List<string>>(); 
-
             if (Directory.Exists(animPath))
             {
                 foreach (var dir in Directory.GetDirectories(animPath))
-                {
-                    string folderName = Path.GetFileName(dir);
-                    var files = Directory.GetFiles(dir, "*.xstage", SearchOption.AllDirectories).ToList();
-                    animatorMap.Add(folderName, files);
+                    map.Add(Path.GetFileName(dir), Directory.GetFiles(dir, "*.xstage", SearchOption.AllDirectories).ToList());
+            }
+            return map;
+        }
 
-                    //Console.WriteLine("DIR: " + folderName);
+        private List<string> ScanPsdFiles(string rootPath)
+        {
+            DirectoryInfo di = new DirectoryInfo(rootPath);
+            string bgPath = Path.Combine(di.Parent?.Parent?.FullName ?? "", "03BACKGROUND", di.Name);
+            return Directory.Exists(bgPath) ? Directory.GetFiles(bgPath, "*.psd", SearchOption.TopDirectoryOnly).ToList() : new List<string>();
+        }
+
+        private void InitializeGridColumns(int totalFiles, List<string> animatorFolders)
+        {
+            dataGridView.Columns.Clear();
+            dataGridView.Rows.Clear();
+            progressBar.Maximum = Math.Max(1, totalFiles);
+
+            dataGridView.Columns.Add("Primary", "Primary Index");
+            foreach (var folder in animatorFolders) dataGridView.Columns.Add(folder, folder);
+
+            dataGridView.Columns.Add(new DataGridViewTextBoxColumn { Name = "PSD", HeaderText = "PSDs", Width = 200 });
+            dataGridView.Columns.Add(new DataGridViewButtonColumn { Name = "Merge", Text = "Merge", UseColumnTextForButtonValue = true });
+            dataGridView.Columns.Add(new DataGridViewImageColumn { Name = "Status", Image = Properties.Resources.STATUS_EMPTY, Width = 30 });
+        }
+
+        private void AddFileRow(dynamic primary, List<string> folders, Dictionary<string, List<string>> animMap, List<string> psds)
+        {
+            int rowIndex = dataGridView.Rows.Add();
+            var row = dataGridView.Rows[rowIndex];
+            row.Cells["Primary"].Value = primary.Name;
+            var rowPaths = new List<string> { primary.FullPath };
+
+            // Animator Matching
+            foreach (var folder in folders)
+            {
+                var match = animMap[folder].FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Equals(primary.Name, StringComparison.OrdinalIgnoreCase));
+                if (match != null)
+                {
+                    row.Cells[folder].Value = primary.Name; rowPaths.Add(match);
+
+                    _logWindow.AppendLog($"FOUND TPL: {match}");
+                    //Console.WriteLine("FOUND TPL: " + match);
                 }
             }
 
-            // 3. PSD 
-            DirectoryInfo di = new DirectoryInfo(rootPath);
-            string bgPath = Path.Combine(di.Parent?.Parent?.FullName ?? "", "03BACKGROUND", di.Name);
-            var psdFiles = Directory.GetFiles(bgPath, "*.psd", SearchOption.TopDirectoryOnly).ToList();
-
-            this.Invoke(new Action(() =>
+            // PSD Matching (Highest version logic)
+            string code = ((string[])primary.Name.Split('-')).LastOrDefault();
+            if (!string.IsNullOrEmpty(code))
             {
-                dataGridView.Columns.Clear();
-                dataGridView.Rows.Clear();
-
-                // Build Columns
-                dataGridView.Columns.Add("Primary", "Primary Index");
-                var folderColumns = animatorMap.Keys.ToList();
-                foreach (var colName in folderColumns)
-                {
-                    dataGridView.Columns.Add(colName, colName);
-                }
-
-                // Add PSD Column
-                dataGridView.Columns.Add("PSD", "PSDs");
-
-                // Add Export and Merge All Button Column
-                dataGridView.Columns.Add(new DataGridViewButtonColumn { Name = "Merge", Text = "Merge", UseColumnTextForButtonValue = true });
-
-                // Add image column
-                var statusCol = new DataGridViewImageColumn { Name = "Status", HeaderText = "Status", Image = Properties.Resources.STATUS_EMPTY, ImageLayout = DataGridViewImageCellLayout.Zoom, Width = 30 };
-                dataGridView.Columns.Add(statusCol);
-
-                // Fill Rows
-                foreach (var primary in primaryFiles)
-                {
-                    int rowIndex = dataGridView.Rows.Add();
-                    var row = dataGridView.Rows[rowIndex];
-                    row.Cells[0].Value = primary.Name; // Column 1: Primary Index
-
-                    var rowPaths = new List<string> { primary.FullPath };
-
-                    for (int i = 0; i < folderColumns.Count; i++)
+                var bestPsd = psds.Where(p => Path.GetFileNameWithoutExtension(p).Split('_').Contains(code))
+                    .OrderByDescending(p =>
                     {
-                        string folderName = folderColumns[i];
-                        var match = animatorMap[folderName].FirstOrDefault(f =>
-                            Path.GetFileNameWithoutExtension(f).Equals(primary.Name, StringComparison.OrdinalIgnoreCase));
+                        string fn = Path.GetFileNameWithoutExtension(p);
+                        int.TryParse(fn.Substring(Math.Max(0, fn.Length - 2)), out int v);
+                        return v;
+                    }).FirstOrDefault();
 
-                        if (match != null)
-                        {
-                            row.Cells[i + 1].Value = primary.Name;
-                            rowPaths.Add(match);
+                if (bestPsd != null)
+                {
+                    row.Cells["PSD"].Value = Path.GetFileNameWithoutExtension(bestPsd);
+                    rowPaths.Add(bestPsd);
 
-                            //Console.WriteLine("CELL FILE: " + match);
-                        }
-                    }
-
-                    // Match PSDs  K_01_05_01)
-                    string primaryCode = primary.Name.Split('-').LastOrDefault();
-
-                    if (!string.IsNullOrEmpty(primaryCode))
-                    {
-                        var matchedPsds = psdFiles.Where(psdPath =>
-                        {
-                            string psdName = Path.GetFileNameWithoutExtension(psdPath);
-                            string baseName = psdName.Length > 3
-                                ? psdName.Substring(0, psdName.Length - 3)
-                                : psdName;
-
-                            string[] psdSegments = baseName.Split('_');
-
-                            return psdSegments.Contains(primaryCode);
-                        }).ToList();
-
-                        if (matchedPsds.Any())
-                        {
-                            row.Cells["PSD"].Value = string.Join(", ", matchedPsds.Select(Path.GetFileNameWithoutExtension));
-                            rowPaths.AddRange(matchedPsds);
-                        }
-                    }
-
-                    row.Tag = rowPaths;
+                    _logWindow.AppendLog($"FOUND PSD: {bestPsd}");
+                    //Console.WriteLine("FOUND PSD: " + bestPsd);
                 }
-            }));
+            }
+            row.Tag = rowPaths;
         }
 
         private async void DgvCompare_CellClick(object sender, DataGridViewCellEventArgs e)
@@ -215,7 +224,7 @@ namespace HarmonyMerge
                     string files = string.Join(";", paths);
 
                     progressBar.Minimum = 0;
-                    progressBar.Maximum = paths.Count - 1;
+                    progressBar.Maximum = Math.Max(0, paths.Count);
                     progressBar.Value = 0;
 
                     var progress = new Progress<int>(value =>
@@ -240,9 +249,26 @@ namespace HarmonyMerge
             string[] paths = inputList.Split(';');
             if (paths.Length < 2) return;
 
-            string mainScene = paths[0]; 
-            string psdPath = paths.Last(); 
+            string mainScene = paths[0];
+            string psdPath = paths.Last();
             var convertToTpl = paths.Skip(1).Take(paths.Length - 2).ToList();
+
+            if (paths.Last().EndsWith(".psd", StringComparison.OrdinalIgnoreCase))
+            {
+                psdPath = paths.Last();
+                convertToTpl = paths.Skip(1).Take(paths.Length - 2).ToList();
+            }
+            else
+            {
+                psdPath = "";
+                convertToTpl = paths.Skip(1).ToList();
+            }
+
+            if (convertToTpl.Count == 0 && string.IsNullOrEmpty(psdPath))
+            {
+                Console.WriteLine($"Row {rowIndex}: Nothing to process (No Animators or PSD).");
+                return;
+            }
 
             DirectoryInfo di = new DirectoryInfo(episodePath);
             string folderPrefix = di.Name.Substring(0, Math.Min(di.Name.Length, 4));
@@ -252,54 +278,70 @@ namespace HarmonyMerge
                 CreateOrFullySecurePath(libPath);
                 System.Threading.Thread.Sleep(2000);
             }
-            
+
             string rootPath = di.Parent?.Parent?.FullName;
 
-            KillHarmony();
+            //KillHarmony();
 
-            //CopyScriptToHarmonyAppData(rootPath);
-            //RepairFolderPermissions(mainScene);
-
-            System.Threading.Thread.Sleep(1000);
-
-            Console.WriteLine("MY LIBRARY: " + libPath);
-
-            var envLibVars = new System.Collections.Generic.Dictionary<string, string>
+            // TPL BLOCK
+            if (convertToTpl != null && convertToTpl.Count > 0)
             {
-                { "HARMONY_TASK", "EXPORT" },
-                { "MY_LIB_PATH", libPath }
-            };
+                System.Threading.Thread.Sleep(1000);
 
-            int currentCount = 0;
+                Console.WriteLine("MY LIBRARY: " + libPath);
 
-            foreach (string sceneFile in convertToTpl)
+                var envLibVars = new System.Collections.Generic.Dictionary<string, string>
+                {
+                    { "HARMONY_TASK", "EXPORT" },
+                    { "MY_LIB_PATH", libPath }
+                };
+
+                int currentCount = 0;
+
+                foreach (string sceneFile in convertToTpl)
+                {
+                    var exportSc = rootPath + "\\RC_ExportTPL.js";
+                    RunHarmonyBatch(harmonyPath, sceneFile, exportSc, envLibVars, rowIndex, true);
+
+                    currentCount++;
+                    progress.Report(currentCount);
+                }
+
+                var importSc = rootPath + "\\RC_ImportTPL.js";
+                var envTplVars = new System.Collections.Generic.Dictionary<string, string>
+                {
+                    { "HARMONY_TASK", "IMPORT" },
+                    { "MY_LIB_PATH", libPath },
+                    { "TPL_COUNT", convertToTpl.Count.ToString() }
+                };
+
+                RunHarmonyBatch(harmonyPath, mainScene, importSc, envLibVars, rowIndex, false);
+
+                System.Threading.Thread.Sleep(1000);
+            }
+            else
             {
-                var exportSc = rootPath + "\\RC_ExportTPL.js";
-                RunHarmonyBatch(harmonyPath, sceneFile, exportSc, envLibVars, rowIndex, true);
-
-                currentCount++;
-                progress.Report(currentCount);
+                Console.WriteLine("No TPL files to process. Skipping Export/Import blocks.");
             }
 
-            var importSc = rootPath + "\\RC_ImportTPL.js";
-            var envTplVars = new System.Collections.Generic.Dictionary<string, string>
+            // PSD BLOCK
+            if (!string.IsNullOrWhiteSpace(psdPath) && File.Exists(psdPath))
             {
-                { "HARMONY_TASK", "IMPORT" },
-                { "MY_LIB_PATH", libPath },
-                { "TPL_COUNT", convertToTpl.Count.ToString() }
-            };
+                System.Threading.Thread.Sleep(1000);
+                Console.WriteLine("Importing PSD: " + psdPath);
 
-            RunHarmonyBatch(harmonyPath, mainScene, importSc, envLibVars, rowIndex, false);
+                var psdSc = Path.Combine(rootPath, "RC_ImportPSD.js");
+                var envPsdVars = new System.Collections.Generic.Dictionary<string, string>
+                {
+                    { "TARGET_PSD", psdPath },
+                };
 
-            System.Threading.Thread.Sleep(1000);
-
-            var psdSc = rootPath + "\\RC_ImportPSD.js";
-            var envPsdVars = new System.Collections.Generic.Dictionary<string, string>
+                RunHarmonyBatch(harmonyPath, mainScene, psdSc, envPsdVars, rowIndex, false);
+            }
+            else
             {
-                { "TARGET_PSD", psdPath },
-            };
-
-            RunHarmonyBatch(harmonyPath, mainScene, psdSc, envPsdVars, rowIndex, false);
+                Console.WriteLine("PSD path is empty or file not found. Skipping PSD Import.");
+            }
         }
 
         private void RunHarmonyBatch(string appPath, string sceneFile, string scriptFile, Dictionary<string, string> env, int rowIndex, bool isReadOnly)
@@ -355,7 +397,8 @@ namespace HarmonyMerge
                 p.WaitForExit();
 
                 // UI Updates
-                this.Invoke(new Action(() => {
+                this.Invoke(new Action(() =>
+                {
                     dataGridView.Rows[rowIndex].Cells["Status"].Value =
                         (p.ExitCode == 0) ? Properties.Resources.STATUS_DONE : Properties.Resources.STATUS_ERROR;
                 }));
@@ -397,27 +440,39 @@ namespace HarmonyMerge
 
                     foreach (DataColumn dc in dt.Columns)
                     {
-                        if (dc.ColumnName.EndsWith("_Path")) continue;
+                        if (dc.ColumnName.EndsWith("_Path") || dc.ColumnName == "Status") continue;
                         dataGridView.Columns.Add(dc.ColumnName, dc.ColumnName);
                     }
 
-                    DataGridViewButtonColumn btnCol = new DataGridViewButtonColumn { Name = "Merge", Text = "Merge", UseColumnTextForButtonValue = true };
-                    dataGridView.Columns.Add(btnCol);
+                    dataGridView.Columns.Add(new DataGridViewButtonColumn { Name = "Merge", Text = "Merge", UseColumnTextForButtonValue = true });
+                    dataGridView.Columns.Add(new DataGridViewImageColumn { Name = "Status", HeaderText = "Status", Image = Properties.Resources.STATUS_EMPTY, ImageLayout = DataGridViewImageCellLayout.Zoom, Width = 30 });
 
                     // Populate rows and restore Tags
                     foreach (DataRow dr in dt.Rows)
                     {
                         int rowIndex = dataGridView.Rows.Add();
+                        var row = dataGridView.Rows[rowIndex];
+
+                        List<string> rowPaths = new List<string>();
+
                         foreach (DataGridViewColumn col in dataGridView.Columns)
                         {
-                            if (col is DataGridViewButtonColumn) continue;
+                            if (col is DataGridViewButtonColumn || col.Name == "Status") continue;
 
-                            dataGridView.Rows[rowIndex].Cells[col.Name].Value = dr[col.Name];
-                            dataGridView.Rows[rowIndex].Cells[col.Name].Tag = dr[col.Name + "_Path"]; // Hidden column with full path (Tag)
+                            row.Cells[col.Name].Value = dr[col.Name].ToString();
+                            string pathKey = col.Name + "_Path";
+                            if (dt.Columns.Contains(pathKey) && !string.IsNullOrEmpty(dr[pathKey].ToString()))
+                            {
+                                rowPaths.Add(dr[pathKey].ToString());
+                            }
                         }
+                        row.Tag = rowPaths;
                     }
 
-                    MessageBox.Show("Data imported and UI reconstructed successfully.");
+                    dataGridView.CellClick -= DgvCompare_CellClick;
+                    dataGridView.CellClick += DgvCompare_CellClick;
+
+                    //MessageBox.Show("Data imported and UI reconstructed successfully.");
                 }
             }
         }
@@ -454,7 +509,7 @@ namespace HarmonyMerge
                     }
 
                     dt.WriteXml(sfd.FileName, XmlWriteMode.WriteSchema);
-                    MessageBox.Show($"Data successfully exported to: {Path.GetFileName(sfd.FileName)}");
+                    //MessageBox.Show($"Data successfully exported to: {Path.GetFileName(sfd.FileName)}");
                 }
             }
         }
