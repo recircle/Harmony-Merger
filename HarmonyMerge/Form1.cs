@@ -222,6 +222,7 @@ namespace HarmonyMerge
                 {
                     int currentRow = e.RowIndex;
                     string files = string.Join(";", paths);
+                    Console.WriteLine("PATHS SENDING TO HARMONY: " + files);
 
                     progressBar.Minimum = 0;
                     progressBar.Maximum = Math.Max(0, paths.Count);
@@ -239,7 +240,7 @@ namespace HarmonyMerge
                     mergingTextOutput.Text = "ALL TASKS COMPLETE!";
                     progressBar.Value = 0;
 
-                    //Console.WriteLine("BUTTON: " + envStr);
+                    Console.WriteLine("BUTTON: " + currentRow);
                 }
             }
         }
@@ -467,6 +468,8 @@ namespace HarmonyMerge
                             }
                         }
                         row.Tag = rowPaths;
+
+                        Console.WriteLine($"Row {rowIndex} tag count: {rowPaths.Count}");
                     }
 
                     dataGridView.CellClick -= DgvCompare_CellClick;
@@ -498,12 +501,32 @@ namespace HarmonyMerge
 
                     foreach (DataGridViewRow row in dataGridView.Rows)
                     {
+                        if (row.IsNewRow) continue;
                         DataRow dr = dt.NewRow();
+
+                        List<string> paths = row.Tag as List<string>;
+
                         foreach (DataGridViewColumn col in dataGridView.Columns)
                         {
                             if (col is DataGridViewButtonColumn) continue;
-                            dr[col.Name] = row.Cells[col.Name].Value;
-                            dr[col.Name + "_Path"] = row.Cells[col.Name].Tag; // Save the full path
+
+                            dr[col.Name] = row.Cells[col.Name].Value?.ToString() ?? "";
+
+                            if (col.Name == "Primary" && paths != null && paths.Count > 0)
+                                dr[col.Name + "_Path"] = paths[0];
+
+                            else if (col.Name == "PSD" && paths != null && paths.Count > 0 && paths.Last().EndsWith(".psd"))
+                                dr[col.Name + "_Path"] = paths.Last();
+
+                            else if (paths != null)
+                            {
+                                string cellVal = row.Cells[col.Name].Value?.ToString();
+                                if (!string.IsNullOrEmpty(cellVal))
+                                {
+                                    dr[col.Name + "_Path"] = paths.FirstOrDefault(p =>
+                                        Path.GetFileNameWithoutExtension(p) == cellVal && !p.EndsWith(".psd"));
+                                }
+                            }
                         }
                         dt.Rows.Add(dr);
                     }
