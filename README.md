@@ -1,9 +1,10 @@
-# Toonboom Harmony Merger
-Toonboom Harmony Scene Merge Manager
-
-GUI for ToonBoom Harmony .xscene merger. 
-
-The idea is to automate the merging of multiple `.xstage` scenes into one, and finally add a background.
+GUI for ToonBoom Harmony .xscene and .psd files merger. 
+<br />
+The idea is to automate the merging of multiple `.xstage` scenes into one: <br />
+- scan directories for file collection<br />
+- export artists files to tpl folder<br />
+- import all tpl files into target .xstage<br />
+- import psd<br />
 <br />
 The current setup assumes a specific directory structure, but this can easily be customized by modifying the conditions in the `ProcessDirectories(string rootPath)` functions.  
 <br />
