@@ -8,6 +8,8 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace HarmonyMerge
 {
@@ -117,7 +119,11 @@ namespace HarmonyMerge
                     AddFileRow(primary, folderColumns, animatorMap, psdFiles);
                 }));
             }
-            this.Invoke(new Action(() => mergingTextOutput.Text = "FINISHED LOADING."));
+            this.Invoke(new Action(() =>
+            {
+                mergingTextOutput.Text = "FINISHED LOADING.";
+                progressBar.Value = 0;
+            }));
         }
 
         private void SaveLastPath(string path)
@@ -165,6 +171,7 @@ namespace HarmonyMerge
 
             dataGridView.Columns.Add(new DataGridViewTextBoxColumn { Name = "PSD", HeaderText = "PSDs", Width = 200 });
             dataGridView.Columns.Add(new DataGridViewButtonColumn { Name = "Merge", Text = "Merge", UseColumnTextForButtonValue = true });
+            dataGridView.Columns.Add(new DataGridViewButtonColumn { Name = "Open", Text = "Open", UseColumnTextForButtonValue = true });
             dataGridView.Columns.Add(new DataGridViewImageColumn { Name = "Status", Image = Properties.Resources.STATUS_EMPTY, Width = 30 });
         }
 
@@ -181,7 +188,8 @@ namespace HarmonyMerge
                 var match = animMap[folder].FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Equals(primary.Name, StringComparison.OrdinalIgnoreCase));
                 if (match != null)
                 {
-                    row.Cells[folder].Value = primary.Name; rowPaths.Add(match);
+                    row.Cells[folder].Value = primary.Name;
+                    rowPaths.Add(match);
 
                     _logWindow.AppendLog($"FOUND TPL: {match}");
                     //Console.WriteLine("FOUND TPL: " + match);
@@ -192,37 +200,55 @@ namespace HarmonyMerge
             string code = ((string[])primary.Name.Split('-')).LastOrDefault();
             if (!string.IsNullOrEmpty(code))
             {
-                var bestPsd = psds.Where(p => Path.GetFileNameWithoutExtension(p).Split('_').Contains(code))
-                    .OrderByDescending(p =>
-                    {
-                        string fn = Path.GetFileNameWithoutExtension(p);
-                        int.TryParse(fn.Substring(Math.Max(0, fn.Length - 2)), out int v);
-                        return v;
-                    }).FirstOrDefault();
+                var bestPsd = psds.Where(p =>
+                {
+                    string fn = Path.GetFileNameWithoutExtension(p);
+                    string[] parts = fn.Split('_');
+
+                    if (parts.Length < 3 || parts[0] != "K") return false;
+                    var sceneCodes = parts.Skip(1).Take(parts.Length - 2);
+
+                    return sceneCodes.Contains(code);
+                })
+                .OrderByDescending(p =>
+                {
+                    string fn = Path.GetFileNameWithoutExtension(p);
+                    string versionStr = fn.Split('_').Last();
+                    int.TryParse(versionStr, out int version);
+                    return version;
+                })
+                .FirstOrDefault();
 
                 if (bestPsd != null)
                 {
                     row.Cells["PSD"].Value = Path.GetFileNameWithoutExtension(bestPsd);
                     rowPaths.Add(bestPsd);
-
                     _logWindow.AppendLog($"FOUND PSD: {bestPsd}");
-                    //Console.WriteLine("FOUND PSD: " + bestPsd);
                 }
             }
+
             row.Tag = rowPaths;
         }
 
         private async void DgvCompare_CellClick(object sender, DataGridViewCellEventArgs e)
         {
-            mergingTextOutput.Text = "";
+            if (e.RowIndex < 0) return;
 
-            if (e.RowIndex >= 0 && dataGridView.Columns[e.ColumnIndex].Name == "Merge")
+            string colName = dataGridView.Columns[e.ColumnIndex].Name;
+
+            // Check if either button was clicked
+            if (colName == "Merge" || colName == "Open")
             {
-                if (dataGridView.Rows[e.RowIndex].Tag is List<string> paths)
+                List<string> paths = null;
+                var tag = dataGridView.Rows[e.RowIndex].Tag;
+
+                if (tag is List<string> list) paths = list;
+                else if (tag is string str) paths = str.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+
+                if (paths != null && paths.Count > 0)
                 {
                     int currentRow = e.RowIndex;
                     string files = string.Join(";", paths);
-                    Console.WriteLine("PATHS SENDING TO HARMONY: " + files);
 
                     progressBar.Minimum = 0;
                     progressBar.Maximum = Math.Max(0, paths.Count);
@@ -231,16 +257,22 @@ namespace HarmonyMerge
                     var progress = new Progress<int>(value =>
                     {
                         progressBar.Value = value;
-                        mergingTextOutput.Text = $"PROCESSING FILE {value} OF {paths.Count}";
-                        progressBar.Update();
+                        mergingTextOutput.Text = $"{(colName == "Open" ? "OPENING" : "PROCESSING")} FILE {value} OF {paths.Count}";
                     });
 
-                    await Task.Run(() => ExportMergeAndImportAllFiles(files, progress, currentRow));
+                    // Route to the correct method based on which button was clicked
+                    if (colName == "Merge")
+                    {
+                        await Task.Run(() => ExportMergeAndImportAllFiles(files, progress, currentRow));
+                        mergingTextOutput.Text = "MERGE COMPLETE!";
+                    }
+                    else if (colName == "Open")
+                    {
+                        await Task.Run(() => OpenAllFiles(files, progress, currentRow));
+                        mergingTextOutput.Text = "FILES OPENED!";
+                    }
 
-                    mergingTextOutput.Text = "ALL TASKS COMPLETE!";
                     progressBar.Value = 0;
-
-                    Console.WriteLine("BUTTON: " + currentRow);
                 }
             }
         }
@@ -422,117 +454,194 @@ namespace HarmonyMerge
             }
         }
 
+        public void OpenAllFiles(string inputList, IProgress<int> progress, int rowIndex)
+        {
+            // Split and remove any empty entries
+            string[] paths = inputList.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            if (paths.Length == 0) return;
+
+            List<string> harmonyFiles = new List<string>();
+            string psdPath = "";
+
+            // 1. Identify PSD vs Harmony files
+            if (paths.Last().EndsWith(".psd", StringComparison.OrdinalIgnoreCase))
+            {
+                psdPath = paths.Last();
+                harmonyFiles = paths.Take(paths.Length - 1).ToList();
+            }
+            else
+            {
+                harmonyFiles = paths.ToList();
+            }
+
+            int currentCount = 0;
+            int totalItems = harmonyFiles.Count + (string.IsNullOrEmpty(psdPath) ? 0 : 1);
+
+            // 2. Open Harmony Scenes
+            foreach (string sceneFile in harmonyFiles)
+            {
+                if (File.Exists(sceneFile))
+                {
+                    RunFileProcess(harmonyPath, sceneFile, isHarmony: true);
+                }
+                currentCount++;
+                progress?.Report(currentCount);
+            }
+
+            // 3. Open PSD file if it exists
+            if (!string.IsNullOrEmpty(psdPath) && File.Exists(psdPath))
+            {
+                RunFileProcess("", psdPath, isHarmony: false);
+                currentCount++;
+                progress?.Report(currentCount);
+            }
+        }
+
+        public void RunFileProcess(string appPath, string filePath, bool isHarmony)
+        {
+            ProcessStartInfo processInfo;
+
+            if (isHarmony)
+            {
+                processInfo = new ProcessStartInfo
+                {
+                    FileName = appPath,
+                    Arguments = $"\"{filePath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+            }
+            else
+            {
+                // For PSDs, use ShellExecute to open with the default system app (Photoshop)
+                processInfo = new ProcessStartInfo
+                {
+                    FileName = filePath,
+                    UseShellExecute = true
+                };
+            }
+
+            try
+            {
+                Process.Start(processInfo);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error opening {filePath}: {ex.Message}");
+            }
+        }
+
 
         private void importListToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            using (OpenFileDialog ofd = new OpenFileDialog())
+            using (OpenFileDialog ofd = new OpenFileDialog { Filter = "XML Files (*.xml)|*.xml" })
             {
-                ofd.Filter = "XML Files (*.xml)|*.xml";
-                ofd.Title = "Merge Comparison Data";
-
                 if (ofd.ShowDialog() == DialogResult.OK)
                 {
-                    DataSet ds = new DataSet();
-                    ds.ReadXml(ofd.FileName);
-                    DataTable dt = ds.Tables[0];
+                    XDocument doc = XDocument.Load(ofd.FileName);
+                    this.episodePath = doc.Root.Element("EpisodePath")?.Value ?? "";
+                    var rows = doc.Descendants("Row").ToList();
 
-                    dataGridView.Columns.Clear();
-                    dataGridView.Rows.Clear();
+                    if (rows.Count == 0) return;
 
-                    foreach (DataColumn dc in dt.Columns)
+                    var animatorFolders = rows.First().Elements("Column")
+                        .Select(c => c.Attribute("Name")?.Value)
+                        .Where(name => name != "Primary" && name != "PSD")
+                        .ToList();
+
+                    this.Invoke(new Action(() =>
                     {
-                        if (dc.ColumnName.EndsWith("_Path") || dc.ColumnName == "Status") continue;
-                        dataGridView.Columns.Add(dc.ColumnName, dc.ColumnName);
-                    }
+                        InitializeGridColumns(rows.Count, animatorFolders);
+                        progressBar.Value = 0;
+                    }));
 
-                    dataGridView.Columns.Add(new DataGridViewButtonColumn { Name = "Merge", Text = "Merge", UseColumnTextForButtonValue = true });
-                    dataGridView.Columns.Add(new DataGridViewImageColumn { Name = "Status", HeaderText = "Status", Image = Properties.Resources.STATUS_EMPTY, ImageLayout = DataGridViewImageCellLayout.Zoom, Width = 30 });
-
-                    // Populate rows and restore Tags
-                    foreach (DataRow dr in dt.Rows)
+                    // 3. Populate Rows
+                    for (int i = 0; i < rows.Count; i++)
                     {
-                        int rowIndex = dataGridView.Rows.Add();
-                        var row = dataGridView.Rows[rowIndex];
+                        var xmlRow = rows[i];
+                        int step = i + 1;
 
-                        List<string> rowPaths = new List<string>();
+                        var rowData = new List<object>();
 
-                        foreach (DataGridViewColumn col in dataGridView.Columns)
+                        rowData.Add(xmlRow.Elements("Column").FirstOrDefault(x => x.Attribute("Name")?.Value == "Primary")?.Value ?? "");
+
+                        foreach (var animator in animatorFolders)
                         {
-                            if (col is DataGridViewButtonColumn || col.Name == "Status") continue;
-
-                            row.Cells[col.Name].Value = dr[col.Name].ToString();
-                            string pathKey = col.Name + "_Path";
-                            if (dt.Columns.Contains(pathKey) && !string.IsNullOrEmpty(dr[pathKey].ToString()))
-                            {
-                                rowPaths.Add(dr[pathKey].ToString());
-                            }
+                            rowData.Add(xmlRow.Elements("Column").FirstOrDefault(x => x.Attribute("Name")?.Value == animator)?.Value ?? "");
                         }
-                        row.Tag = rowPaths;
 
-                        Console.WriteLine($"Row {rowIndex} tag count: {rowPaths.Count}");
+                        rowData.Add(xmlRow.Elements("Column").FirstOrDefault(x => x.Attribute("Name")?.Value == "PSD")?.Value ?? "");
+
+                        // UI Update
+                        this.Invoke(new Action(() =>
+                        {
+                            int rowIndex = dataGridView.Rows.Add(rowData.ToArray());
+
+                            // Store the HiddenPaths in the Tag property for later use (Merging)
+                            dataGridView.Rows[rowIndex].Tag = xmlRow.Element("HiddenPaths")?.Value;
+
+                            mergingTextOutput.Text = $"IMPORTING: {rowData[0]}";
+                            progressBar.Value = step;
+                        }));
                     }
 
                     dataGridView.CellClick -= DgvCompare_CellClick;
                     dataGridView.CellClick += DgvCompare_CellClick;
 
-                    //MessageBox.Show("Data imported and UI reconstructed successfully.");
+                    this.Invoke(new Action(() =>
+                    {
+                        mergingTextOutput.Text = "XML IMPORT FINISHED.";
+                        progressBar.Value = 0;
+                    }));
                 }
             }
         }
 
         private void renderListToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            using (SaveFileDialog sfd = new SaveFileDialog())
+            using (SaveFileDialog sfd = new SaveFileDialog { Filter = "XML Files (*.xml)|*.xml", FileName = "HarmonyGridExport.xml" })
             {
-                sfd.Filter = "XML Files (*.xml)|*.xml";
-                sfd.Title = "Save Comparison Data";
-                sfd.FileName = "XStageComparison.xml";
-
                 if (sfd.ShowDialog() == DialogResult.OK)
                 {
-                    DataTable dt = new DataTable("XStageData");
-
-                    foreach (DataGridViewColumn col in dataGridView.Columns)
+                    XmlWriterSettings settings = new XmlWriterSettings { Indent = true };
+                    using (XmlWriter writer = XmlWriter.Create(sfd.FileName, settings))
                     {
-                        if (col is DataGridViewButtonColumn) continue;
-                        dt.Columns.Add(col.Name);
-                        dt.Columns.Add(col.Name + "_Path"); // Hidden column with full path (Tag)
-                    }
+                        writer.WriteStartDocument();
+                        writer.WriteStartElement("HarmonyData");
+                        writer.WriteElementString("EpisodePath", episodePath);
 
-                    foreach (DataGridViewRow row in dataGridView.Rows)
-                    {
-                        if (row.IsNewRow) continue;
-                        DataRow dr = dt.NewRow();
-
-                        List<string> paths = row.Tag as List<string>;
-
-                        foreach (DataGridViewColumn col in dataGridView.Columns)
+                        foreach (DataGridViewRow row in dataGridView.Rows)
                         {
-                            if (col is DataGridViewButtonColumn) continue;
+                            if (row.IsNewRow) continue;
 
-                            dr[col.Name] = row.Cells[col.Name].Value?.ToString() ?? "";
+                            writer.WriteStartElement("Row");
 
-                            if (col.Name == "Primary" && paths != null && paths.Count > 0)
-                                dr[col.Name + "_Path"] = paths[0];
-
-                            else if (col.Name == "PSD" && paths != null && paths.Count > 0 && paths.Last().EndsWith(".psd"))
-                                dr[col.Name + "_Path"] = paths.Last();
-
-                            else if (paths != null)
+                            // 1. Save all cell values by Column Name
+                            foreach (DataGridViewColumn col in dataGridView.Columns)
                             {
-                                string cellVal = row.Cells[col.Name].Value?.ToString();
-                                if (!string.IsNullOrEmpty(cellVal))
+                                // Skip buttons and status images, just save text/data
+                                if (col is DataGridViewTextBoxColumn || col.Name == "Primary")
                                 {
-                                    dr[col.Name + "_Path"] = paths.FirstOrDefault(p =>
-                                        Path.GetFileNameWithoutExtension(p) == cellVal && !p.EndsWith(".psd"));
+                                    writer.WriteStartElement("Column");
+                                    writer.WriteAttributeString("Name", col.Name);
+                                    writer.WriteValue(row.Cells[col.Index].Value?.ToString() ?? "");
+                                    writer.WriteEndElement();
                                 }
                             }
-                        }
-                        dt.Rows.Add(dr);
-                    }
 
-                    dt.WriteXml(sfd.FileName, XmlWriteMode.WriteSchema);
-                    //MessageBox.Show($"Data successfully exported to: {Path.GetFileName(sfd.FileName)}");
+                            // 2. Save the row.Tag (List<string> rowPaths)
+                            if (row.Tag is List<string> paths)
+                            {
+                                writer.WriteElementString("HiddenPaths", string.Join(";", paths));
+                            }
+
+                            writer.WriteEndElement(); // Row
+                        }
+
+                        writer.WriteEndElement();
+                        writer.WriteEndDocument();
+                    }
+                    MessageBox.Show("Export Complete!");
                 }
             }
         }
@@ -562,7 +671,12 @@ namespace HarmonyMerge
                 dataGridView.ClearSelection();
                 row.Selected = true;
 
-                if (row.Tag is List<string> paths)
+                List<string> paths = null;
+                if (row.Tag is List<string> list) paths = list;
+                else if (row.Tag is string str) paths = str.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+
+                // Only proceed if we successfully extracted paths
+                if (paths != null && paths.Count > 0)
                 {
                     string files = string.Join(";", paths);
                     int rowIndex = row.Index;
