@@ -35,8 +35,7 @@
             this.label2 = new System.Windows.Forms.Label();
             this.label3 = new System.Windows.Forms.Label();
             this.label4 = new System.Windows.Forms.Label();
-            this.exportPrefix1 = new System.Windows.Forms.TextBox();
-            this.exportPrefix2 = new System.Windows.Forms.TextBox();
+            this.matchPrefix = new System.Windows.Forms.TextBox();
             this.exportFileName = new System.Windows.Forms.NumericUpDown();
             this.label5 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.exportFileName)).BeginInit();
@@ -91,9 +90,9 @@
             this.label2.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(238)));
             this.label2.Location = new System.Drawing.Point(9, 135);
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(101, 15);
+            this.label2.Size = new System.Drawing.Size(100, 15);
             this.label2.TabIndex = 5;
-            this.label2.Text = "Export shot prefix";
+            this.label2.Text = "Match shot prefix";
             // 
             // label3
             // 
@@ -101,42 +100,32 @@
             this.label3.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(238)));
             this.label3.Location = new System.Drawing.Point(9, 198);
             this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(101, 15);
+            this.label3.Size = new System.Drawing.Size(0, 15);
             this.label3.TabIndex = 6;
-            this.label3.Text = "Export shot prefix";
             // 
             // label4
             // 
             this.label4.AutoSize = true;
             this.label4.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(238)));
-            this.label4.Location = new System.Drawing.Point(9, 262);
+            this.label4.Location = new System.Drawing.Point(9, 198);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(120, 15);
             this.label4.TabIndex = 7;
             this.label4.Text = "Export file name ###";
             // 
-            // exportPrefix1
+            // matchPrefix
             // 
-            this.exportPrefix1.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.exportPrefix1.Location = new System.Drawing.Point(12, 154);
-            this.exportPrefix1.Name = "exportPrefix1";
-            this.exportPrefix1.Size = new System.Drawing.Size(205, 13);
-            this.exportPrefix1.TabIndex = 8;
-            this.exportPrefix1.Text = "K";
-            // 
-            // exportPrefix2
-            // 
-            this.exportPrefix2.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.exportPrefix2.Location = new System.Drawing.Point(12, 216);
-            this.exportPrefix2.Name = "exportPrefix2";
-            this.exportPrefix2.Size = new System.Drawing.Size(205, 13);
-            this.exportPrefix2.TabIndex = 9;
-            this.exportPrefix2.Text = "S";
+            this.matchPrefix.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.matchPrefix.Location = new System.Drawing.Point(12, 154);
+            this.matchPrefix.Name = "matchPrefix";
+            this.matchPrefix.Size = new System.Drawing.Size(205, 13);
+            this.matchPrefix.TabIndex = 8;
+            this.matchPrefix.Text = "K";
             // 
             // exportFileName
             // 
             this.exportFileName.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.exportFileName.Location = new System.Drawing.Point(12, 280);
+            this.exportFileName.Location = new System.Drawing.Point(12, 216);
             this.exportFileName.Maximum = new decimal(new int[] {
             5,
             0,
@@ -175,8 +164,7 @@
             this.ClientSize = new System.Drawing.Size(864, 453);
             this.Controls.Add(this.label5);
             this.Controls.Add(this.exportFileName);
-            this.Controls.Add(this.exportPrefix2);
-            this.Controls.Add(this.exportPrefix1);
+            this.Controls.Add(this.matchPrefix);
             this.Controls.Add(this.label4);
             this.Controls.Add(this.label3);
             this.Controls.Add(this.label2);
@@ -205,8 +193,7 @@
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.Label label3;
         private System.Windows.Forms.Label label4;
-        private System.Windows.Forms.TextBox exportPrefix1;
-        private System.Windows.Forms.TextBox exportPrefix2;
+        private System.Windows.Forms.TextBox matchPrefix;
         private System.Windows.Forms.NumericUpDown exportFileName;
         private System.Windows.Forms.Label label5;
     }

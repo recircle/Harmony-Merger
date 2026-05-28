@@ -32,7 +32,7 @@ namespace HarmonyMerge
         private void Form1_Load(object sender, EventArgs e)
         {
             // auto open log window
-            OpenLog();
+            //OpenLog();
 
         }
 
@@ -205,7 +205,7 @@ namespace HarmonyMerge
                     string fn = Path.GetFileNameWithoutExtension(p);
                     string[] parts = fn.Split('_');
 
-                    if (parts.Length < 3 || parts[0] != "K") return false;
+                    if (parts.Length < 3 || parts[0] != Properties.Settings.Default.MatchPrefix) return false;
                     var sceneCodes = parts.Skip(1).Take(parts.Length - 2);
 
                     return sceneCodes.Contains(code);

@@ -1,11 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace HarmonyMerge
@@ -16,7 +9,7 @@ namespace HarmonyMerge
 
         public ProgramSettings()
         {
-            InitializeComponent();            
+            InitializeComponent();
         }
 
         private void ProgramSettings_Load(object sender, EventArgs e)
@@ -25,8 +18,7 @@ namespace HarmonyMerge
 
             videoExport.SelectedIndex = 0;
 
-            exportPrefix1.Text = Properties.Settings.Default.ExportPrefix1;
-            exportPrefix2.Text = Properties.Settings.Default.ExportPrefix2;
+            matchPrefix.Text = Properties.Settings.Default.MatchPrefix;
             exportFileName.Value = Properties.Settings.Default.ExportNameDecimal;
         }
 
@@ -64,7 +56,7 @@ namespace HarmonyMerge
 
         private void ComputerSelection_FormClosed(object sender, FormClosedEventArgs e)
         {
-            
+
         }
 
         private void ProgramSettings_FormClosing(object sender, FormClosingEventArgs e)
@@ -74,8 +66,7 @@ namespace HarmonyMerge
             if (MessageBox.Show("Do you want to save changes?", "Settings", MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
                 //e.Cancel = true;
-                Properties.Settings.Default.ExportPrefix1 = exportPrefix1.Text;
-                Properties.Settings.Default.ExportPrefix2 = exportPrefix2.Text;
+                Properties.Settings.Default.MatchPrefix = matchPrefix.Text;
                 Properties.Settings.Default.ExportNameDecimal = (int)exportFileName.Value;
                 Properties.Settings.Default.HarmonyPath = harmonyPath;
                 Properties.Settings.Default.Save();
