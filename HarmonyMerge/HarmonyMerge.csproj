@@ -143,6 +143,9 @@
     <None Include="Icons\STATUS-EMPTY.png" />
     <None Include="Icons\STATUS-DONE.png" />
     <None Include="Icons\REMOVE-FILE.png" />
+    <Content Include="Icons\MERGE-FILES.png" />
+    <Content Include="Icons\OPEN-ALL.png" />
+    <Content Include="Icons\OPEN-FIRST.png" />
     <Content Include="Icons\STATUS-ERROR.png" />
   </ItemGroup>
   <ItemGroup>

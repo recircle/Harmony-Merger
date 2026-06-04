@@ -56,24 +56,12 @@ namespace HarmonyMerge.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("K")]
-        public string ExportPrefix1 {
+        public string MatchPrefix {
             get {
-                return ((string)(this["ExportPrefix1"]));
+                return ((string)(this["MatchPrefix"]));
             }
             set {
-                this["ExportPrefix1"] = value;
-            }
-        }
-        
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("S")]
-        public string ExportPrefix2 {
-            get {
-                return ((string)(this["ExportPrefix2"]));
-            }
-            set {
-                this["ExportPrefix2"] = value;
+                this["MatchPrefix"] = value;
             }
         }
         

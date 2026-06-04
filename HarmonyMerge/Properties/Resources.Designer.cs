@@ -83,6 +83,36 @@ namespace HarmonyMerge.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
+        internal static System.Drawing.Bitmap MERGE_FILES {
+            get {
+                object obj = ResourceManager.GetObject("MERGE_FILES", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap OPEN_ALL {
+            get {
+                object obj = ResourceManager.GetObject("OPEN_ALL", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap OPEN_FIRST {
+            get {
+                object obj = ResourceManager.GetObject("OPEN_FIRST", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
         internal static System.Drawing.Bitmap REMOVE_FILE {
             get {
                 object obj = ResourceManager.GetObject("REMOVE-FILE", resourceCulture);

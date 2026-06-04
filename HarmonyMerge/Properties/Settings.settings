@@ -13,11 +13,8 @@
   &lt;string&gt;SEQUENCE-png&lt;/string&gt;
 &lt;/ArrayOfString&gt;</Value>
     </Setting>
-    <Setting Name="ExportPrefix1" Type="System.String" Scope="User">
+    <Setting Name="MatchPrefix" Type="System.String" Scope="User">
       <Value Profile="(Default)">K</Value>
-    </Setting>
-    <Setting Name="ExportPrefix2" Type="System.String" Scope="User">
-      <Value Profile="(Default)">S</Value>
     </Setting>
     <Setting Name="ExportNameDecimal" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">2</Value>

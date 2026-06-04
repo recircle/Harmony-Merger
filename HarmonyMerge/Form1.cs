@@ -46,6 +46,7 @@ namespace HarmonyMerge
             //importListToolStripMenuItem.Click += (s, e) => ImportFromXml();
 
             dataGridView.CellClick += DgvCompare_CellClick;
+            //dataGridView.CellContentClick += DataGridView_CellContentClick;
 
             dataGridView.ColumnHeadersDefaultCellStyle.BackColor = dataGridView.BackgroundColor;
             dataGridView.ColumnHeadersDefaultCellStyle.SelectionBackColor = dataGridView.BackgroundColor;
@@ -58,6 +59,7 @@ namespace HarmonyMerge
             }
 
             harmonyPath = Properties.Settings.Default.HarmonyPath;
+
         }
 
         private void OpenLog()
@@ -86,9 +88,26 @@ namespace HarmonyMerge
                     SaveLastPath(episodePath);
 
                     progressBar.Value = 0;
-                    mergingTextOutput.Text = "START PROCESSING";
+                    string folderName = System.IO.Path.GetFileName(episodePath);
 
-                    await Task.Run(() => ProcessDirectories(episodePath));
+                    using (var cts = new System.Threading.CancellationTokenSource())
+                    {
+                        // 2. Start the animation task on the UI thread without awaiting it yet
+                        Task animationTask = AnimateLoadingTextAsync(folderName, cts.Token);
+
+                        try
+                        {
+                            // 3. Run your heavy processing task
+                            await Task.Run(() => ProcessDirectories(episodePath));
+                        }
+                        finally
+                        {
+                            // 4. Stop the animation as soon as the processing finishes or fails
+                            cts.Cancel();
+                            try { await animationTask; } catch (OperationCanceledException) { }
+                        }
+                    }
+
 
                     mergingTextOutput.Text = "PROCESSING COMPLETE";
                 }
@@ -170,8 +189,12 @@ namespace HarmonyMerge
             foreach (var folder in animatorFolders) dataGridView.Columns.Add(folder, folder);
 
             dataGridView.Columns.Add(new DataGridViewTextBoxColumn { Name = "PSD", HeaderText = "PSDs", Width = 200 });
-            dataGridView.Columns.Add(new DataGridViewButtonColumn { Name = "Merge", Text = "Merge", UseColumnTextForButtonValue = true });
-            dataGridView.Columns.Add(new DataGridViewButtonColumn { Name = "Open", Text = "Open", UseColumnTextForButtonValue = true });
+            dataGridView.Columns.Add(new DataGridViewButtonColumn { Name = "Merge", Text = "Merge", Width = 50, UseColumnTextForButtonValue = true });
+            dataGridView.Columns.Add(new DataGridViewButtonColumn { Name = "OpenOne", Text = "Open", Width = 50, UseColumnTextForButtonValue = true });
+            dataGridView.Columns.Add(new DataGridViewButtonColumn { Name = "OpenAll", Text = "Open All", Width = 60, UseColumnTextForButtonValue = true });
+            //dataGridView.Columns.Add(new DataGridViewImageColumn { Name = "Merge", HeaderText = "Merge", Image = Properties.Resources.MERGE_FILES, ImageLayout = DataGridViewImageCellLayout.Zoom, Width = 50 });
+            //dataGridView.Columns.Add(new DataGridViewImageColumn { Name = "OpenOne", HeaderText = "Open First", Image = Properties.Resources.OPEN_FIRST, ImageLayout = DataGridViewImageCellLayout.Zoom, Width = 50 });
+            //dataGridView.Columns.Add(new DataGridViewImageColumn { Name = "OpenAll", HeaderText = "Open All", Image = Properties.Resources.OPEN_ALL, ImageLayout = DataGridViewImageCellLayout.Zoom, Width = 50 });
             dataGridView.Columns.Add(new DataGridViewImageColumn { Name = "Status", Image = Properties.Resources.STATUS_EMPTY, Width = 30 });
         }
 
@@ -197,18 +220,23 @@ namespace HarmonyMerge
             }
 
             // PSD Matching (Highest version logic)
-            string code = ((string[])primary.Name.Split('-')).LastOrDefault();
-            if (!string.IsNullOrEmpty(code))
+            string codeStr = ((string[])primary.Name.Split('-')).LastOrDefault();
+            // Convert primary code to integer to ignore leading zero differences
+            if (!string.IsNullOrEmpty(codeStr) && int.TryParse(codeStr, out int primaryCode))
             {
                 var bestPsd = psds.Where(p =>
                 {
                     string fn = Path.GetFileNameWithoutExtension(p);
                     string[] parts = fn.Split('_');
 
-                    if (parts.Length < 3 || parts[0] != Properties.Settings.Default.MatchPrefix) return false;
-                    var sceneCodes = parts.Skip(1).Take(parts.Length - 2);
+                    // Must have prefix, scene codes, and a version number (at least 3 parts)
+                    if (parts.Length < 3) return false;
 
-                    return sceneCodes.Contains(code);
+                    // Dynamically extract all parts between the prefix and the version
+                    var sceneCodeStrings = parts.Skip(1).Take(parts.Length - 2);
+
+                    // Convert PSD scene parts to integers and look for a numeric match
+                    return sceneCodeStrings.Any(s => int.TryParse(s, out int psdCode) && psdCode == primaryCode);
                 })
                 .OrderByDescending(p =>
                 {
@@ -230,6 +258,29 @@ namespace HarmonyMerge
             row.Tag = rowPaths;
         }
 
+        private void DataGridView_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+            // Ignore header clicks (RowIndex will be -1)
+            if (e.RowIndex < 0) return;
+
+            string columnName = dataGridView.Columns[e.ColumnIndex].Name;
+
+            switch (columnName)
+            {
+                case "Merge":
+                    DgvCompare_CellClick(sender, e);
+                    break;
+
+                case "OpenOne":
+                    DgvCompare_CellClick(sender, e);
+                    break;
+
+                case "OpenAll":
+                    DgvCompare_CellClick(sender, e);
+                    break;
+            }
+        }
+
         private async void DgvCompare_CellClick(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0) return;
@@ -237,7 +288,7 @@ namespace HarmonyMerge
             string colName = dataGridView.Columns[e.ColumnIndex].Name;
 
             // Check if either button was clicked
-            if (colName == "Merge" || colName == "Open")
+            if (colName == "Merge" || colName == "OpenAll" || colName == "OpenOne")
             {
                 List<string> paths = null;
                 var tag = dataGridView.Rows[e.RowIndex].Tag;
@@ -257,7 +308,7 @@ namespace HarmonyMerge
                     var progress = new Progress<int>(value =>
                     {
                         progressBar.Value = value;
-                        mergingTextOutput.Text = $"{(colName == "Open" ? "OPENING" : "PROCESSING")} FILE {value} OF {paths.Count}";
+                        mergingTextOutput.Text = $"{(colName == "OpenAll" ? "OPENING" : "PROCESSING")} FILE {value} OF {paths.Count}";
                     });
 
                     // Route to the correct method based on which button was clicked
@@ -266,9 +317,14 @@ namespace HarmonyMerge
                         await Task.Run(() => ExportMergeAndImportAllFiles(files, progress, currentRow));
                         mergingTextOutput.Text = "MERGE COMPLETE!";
                     }
-                    else if (colName == "Open")
+                    else if (colName == "OpenAll")
                     {
                         await Task.Run(() => OpenAllFiles(files, progress, currentRow));
+                        mergingTextOutput.Text = "FIRST FILE OPENED!";
+                    }
+                    else if (colName == "OpenOne")
+                    {
+                        await Task.Run(() => OpenAllFiles(files, progress, currentRow, true));
                         mergingTextOutput.Text = "FILES OPENED!";
                     }
 
@@ -454,11 +510,17 @@ namespace HarmonyMerge
             }
         }
 
-        public void OpenAllFiles(string inputList, IProgress<int> progress, int rowIndex)
+        public void OpenAllFiles(string inputList, IProgress<int> progress, int rowIndex, bool openOnlyFirst = false)
         {
             // Split and remove any empty entries
             string[] paths = inputList.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
             if (paths.Length == 0) return;
+
+            // IF openOnlyFirst is true, slice the array down to just the first path
+            if (openOnlyFirst)
+            {
+                paths = new string[] { paths[0] };
+            }
 
             List<string> harmonyFiles = new List<string>();
             string psdPath = "";
@@ -585,8 +647,10 @@ namespace HarmonyMerge
                         }));
                     }
 
-                    dataGridView.CellClick -= DgvCompare_CellClick;
-                    dataGridView.CellClick += DgvCompare_CellClick;
+                    //dataGridView.CellClick -= DgvCompare_CellClick;
+                    //dataGridView.CellClick += DgvCompare_CellClick;
+                    dataGridView.CellClick -= DataGridView_CellContentClick;
+                    dataGridView.CellClick += DataGridView_CellContentClick;
 
                     this.Invoke(new Action(() =>
                     {
@@ -788,6 +852,28 @@ namespace HarmonyMerge
                 }
             }
             Console.WriteLine("Scripts copied and overwritten in Harmony folder.");
+        }
+
+        private async Task AnimateLoadingTextAsync(string folderName, System.Threading.CancellationToken token)
+        {
+            int dotCount = 0;
+            while (!token.IsCancellationRequested)
+            {
+                string dots = new string('.', dotCount);
+                mergingTextOutput.Text = $"{folderName} - START PROCESSING {dots}";
+
+                dotCount = (dotCount + 1) % 4; // Cycles through 0, 1, 2, 3 dots
+
+                try
+                {
+                    // Wait 500ms before adding the next dot
+                    await Task.Delay(500, token);
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
+            }
         }
     }
 }
